@@ -9,7 +9,7 @@ const packageJson = JSON.parse(readFileSync("package.json", "utf8"));
 const lock = JSON.parse(readFileSync("package-lock.json", "utf8"));
 const cargo = readFileSync("server/Cargo.toml", "utf8");
 const cargoLock = readFileSync("server/Cargo.lock", "utf8");
-const addon = readFileSync("deploy/home-assistant/config.source.yaml", "utf8");
+const addon = readFileSync("deploy/home-assistant/addon-manifest.yaml", "utf8");
 
 const versions = {
   "package.json": packageJson.version,
@@ -19,7 +19,7 @@ const versions = {
   "server/Cargo.lock": cargoLock.match(
     /name = "binga-server"\s+version = "([^"]+)"/,
   )?.[1],
-  "deploy/home-assistant/config.source.yaml": addon.match(
+  "deploy/home-assistant/addon-manifest.yaml": addon.match(
     /^version:\s*"([^"]+)"/m,
   )?.[1],
 };

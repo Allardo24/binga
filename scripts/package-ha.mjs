@@ -25,7 +25,7 @@ const files = [
   "server/Cargo.toml",
   "server/Cargo.lock",
   "server/src",
-  "deploy/home-assistant/config.source.yaml",
+  "deploy/home-assistant/addon-manifest.yaml",
   "deploy/home-assistant/DOCS.md",
   "deploy/home-assistant/CHANGELOG.md",
 ];
@@ -35,7 +35,7 @@ function copy(relative) {
   if (!existsSync(source))
     throw new Error(`Ontbrekend pakketbestand: ${relative}`);
   const targetName =
-    relative === "deploy/home-assistant/config.source.yaml"
+    relative === "deploy/home-assistant/addon-manifest.yaml"
       ? "config.yaml"
       : relative.startsWith("deploy/home-assistant/")
         ? relative.slice("deploy/home-assistant/".length)

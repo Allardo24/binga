@@ -13,7 +13,7 @@
     "web:build": "tsc -b && vite build",
     "server:build": "node scripts/rust.mjs build --locked --release",
     "ha:package": "node scripts/package-ha.mjs",
-    "ha:check": "node scripts/package-ha.mjs --check",
+    "ha:check": "node scripts/package-ha.mjs --check && node scripts/check-ha-repository.mjs",
     "test:e2e": "node scripts/rust.mjs build --locked && playwright test",
     "format": "prettier --write src scripts tests *.ts *.json"
   },

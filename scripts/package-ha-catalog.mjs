@@ -24,7 +24,7 @@ if (within.startsWith(`..${sep}`) || within === ".." || within === "") {
 }
 
 const source = resolve("deploy/home-assistant");
-const config = readFileSync(resolve(source, "config.source.yaml"), "utf8");
+const config = readFileSync(resolve(source, "addon-manifest.yaml"), "utf8");
 if (config.includes("\nimage:"))
   throw new Error("De bronconfig bevat al een image.");
 

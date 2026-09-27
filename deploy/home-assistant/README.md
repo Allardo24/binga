@@ -10,6 +10,8 @@
 
 De add-on haalt het vooraf gebouwde publieke ARM64-image voor de versie uit `binga/config.yaml` op. Op de Pi hoeft daardoor geen Node- of Rust-build te draaien.
 
+Krijg je na een eerdere mislukte installatie nog een melding over een ontbrekende Dockerfile? Kies in de add-onwinkel **⋮ → Controleren op updates** om de repository opnieuw te laden en probeer de installatie opnieuw. Supervisor hoort voor Binga het GHCR-image te gebruiken.
+
 ## Alternatief: lokale bronbundel
 
 Deze map bevat de bron voor een installeerbare lokale Home Assistant-add-on. Maak vanuit de projectroot eerst de zelf-contained bundel:
