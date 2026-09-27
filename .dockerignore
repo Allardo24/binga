@@ -1,0 +1,9 @@
+node_modules
+dist
+server/target
+server-data
+.tools
+.git
+.env
+test-results
+playwright-report

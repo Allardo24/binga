@@ -1,0 +1,37 @@
+{
+  "name": "binga",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "node scripts/dev.mjs",
+    "start:local": "npm run web:build && node scripts/start-local.mjs",
+    "web:dev": "vite --host 127.0.0.1",
+    "server:dev": "node scripts/rust.mjs run",
+    "test": "vitest run",
+    "test:server": "node scripts/rust.mjs test --locked",
+    "web:build": "tsc -b && vite build",
+    "server:build": "node scripts/rust.mjs build --locked --release",
+    "ha:package": "node scripts/package-ha.mjs",
+    "ha:check": "node scripts/package-ha.mjs --check",
+    "test:e2e": "node scripts/rust.mjs build --locked && playwright test",
+    "format": "prettier --write src scripts tests *.ts *.json"
+  },
+  "dependencies": {
+    "lucide-react": "^0.468.0",
+    "qrcode.react": "^4.2.0",
+    "react": "^19.1.1",
+    "react-dom": "^19.1.1"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.55.0",
+    "@types/node": "^24.0.0",
+    "@types/react": "^19.1.0",
+    "@types/react-dom": "^19.1.0",
+    "@vitejs/plugin-react": "^5.0.0",
+    "prettier": "^3.9.9",
+    "typescript": "^5.9.0",
+    "vite": "^7.1.0",
+    "vitest": "^4.1.11"
+  }
+}

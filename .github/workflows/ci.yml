@@ -1,0 +1,64 @@
+name: Controleer Binga
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - name: Broncode ophalen
+        uses: actions/checkout@v4
+
+      - name: Node.js instellen
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+
+      - name: Rust instellen
+        run: |
+          rustup toolchain install 1.98.0 --profile minimal --component clippy
+          rustup default 1.98.0
+
+      - name: Webafhankelijkheden installeren
+        run: npm ci
+
+      - name: Frontendtests
+        run: npm test
+
+      - name: Productieweb bouwen
+        run: npm run web:build
+
+      - name: Rusttests
+        run: cargo test --locked --manifest-path server/Cargo.toml
+
+      - name: Rust-lints
+        run: cargo clippy --locked --manifest-path server/Cargo.toml --all-targets -- -D warnings
+
+      - name: Home Assistant-bundel controleren
+        run: |
+          npm run ha:package
+          npm run ha:check
+
+      - name: Chromium voor browsertests installeren
+        run: npx playwright install --with-deps chromium
+
+      - name: Browserflows en 50 spelers
+        run: npm run test:e2e
+
+      - name: Foutgegevens bewaren
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: binga-test-results
+          path: test-results/
+          if-no-files-found: ignore

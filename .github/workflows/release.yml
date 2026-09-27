@@ -1,0 +1,75 @@
+name: Bouw Home Assistant-image
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    uses: ./.github/workflows/ci.yml
+
+  image:
+    needs: checks
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 90
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Broncode van de tag ophalen
+        uses: actions/checkout@v4
+
+      - name: Node.js instellen
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+
+      - name: Versies vergelijken
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION="${GITHUB_REF_NAME#v}"
+          test "v${VERSION}" = "$GITHUB_REF_NAME"
+          node scripts/check-release-version.mjs "$VERSION"
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+          echo "IMAGE=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_ENV"
+
+      - name: Native ARM64-image bouwen
+        run: |
+          docker build \
+            --platform linux/arm64 \
+            --build-arg BUILD_VERSION="$VERSION" \
+            --build-arg BUILD_ARCH=aarch64 \
+            --build-arg SOURCE_REPOSITORY="https://github.com/$GITHUB_REPOSITORY" \
+            --tag "$IMAGE:$VERSION" .
+
+      - name: Container en gezondheid controleren
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker run --detach --name binga-smoke --platform linux/arm64 -p 18080:8080 "$IMAGE:$VERSION"
+          trap 'docker logs binga-smoke; docker rm -f binga-smoke' EXIT
+          for attempt in $(seq 1 60); do
+            if curl --fail --silent http://127.0.0.1:18080/api/health > health.json; then
+              break
+            fi
+            sleep 2
+          done
+          node -e 'const h=require("./health.json"); if (!h.ok || h.version !== process.env.VERSION) process.exit(1)'
+
+      - name: Aanmelden bij GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Versie-image publiceren
+        run: docker push "$IMAGE:$VERSION"
+
+      - name: Gepubliceerd image inspecteren
+        run: docker manifest inspect "$IMAGE:$VERSION" > /dev/null

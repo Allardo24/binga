@@ -1,0 +1,19 @@
+name: Binga
+version: "0.1.0"
+slug: binga
+description: Live bingo met je eigen voorspellingen
+url: https://binga.allardnet.nl
+arch:
+  - aarch64
+startup: application
+boot: auto
+init: false
+stage: experimental
+backup: cold
+ports:
+  8080/tcp: 8098
+ports_description:
+  8080/tcp: Binga-webinterface voor lokale toegang en Cloudflared
+webui: http://[HOST]:[PORT:8080]
+options: {}
+schema: {}

@@ -1,0 +1,5 @@
+# Voeg alleen deze entry toe aan de bestaande additional_hosts-lijst.
+# Vervang HAOS_LAN_IP door het vaste lokale IP-adres van de Pi.
+additional_hosts:
+  - hostname: binga.allardnet.nl
+    service: http://HAOS_LAN_IP:8098

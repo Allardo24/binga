@@ -1,0 +1,11 @@
+node_modules/
+dist/
+server/target/
+server-data/
+.tools/
+.env
+*.log
+test-results/
+playwright-report/
+*.tsbuildinfo
+build-artifacts/
