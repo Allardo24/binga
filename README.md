@@ -100,21 +100,23 @@ De tests controleren een volledige mobiele spelronde inclusief login, kaartbouw,
 
 ## HAOS en Cloudflared
 
-Het Dockerfile en een installeerbare lokale HAOS-add-onbundel staan klaar. Maak die met `npm run ha:package`; de uitvoer komt in `build-artifacts/home-assistant-repository/binga`. Zie [de installatie-opzet](deploy/home-assistant/README.md). De beoogde route is `binga.allardnet.nl` → bestaande Cloudflared-add-on → `http://HAOS_LAN_IP:8098` → Binga-add-on. Er is nog geen image of catalogus gepubliceerd en de tunnel op de Pi is nog niet aangepast.
+De publieke Home Assistant-add-on staat in deze GitHub-repository. Voeg `https://github.com/Allardo24/binga` toe als aangepaste repository in de add-onwinkel, installeer Binga en start de add-on. De gepubliceerde versie ondersteunt `aarch64` (64-bits ARM). Zie [de installatie-instructies](deploy/home-assistant/README.md). De beoogde publieke route is `binga.allardnet.nl` → bestaande Cloudflared-add-on → `http://HAOS_LAN_IP:8098` → Binga-add-on. De tunnel op de Pi moet nog worden ingesteld en getest.
+
+Een lokale bronbundel blijft beschikbaar met `npm run ha:package`; de uitvoer komt in `build-artifacts/home-assistant-repository/binga`.
 
 ## GitHub en releases
 
 De broncode staat in [Allardo24/binga](https://github.com/Allardo24/binga). Een push naar `main` of een pull request voert automatisch de frontend-, Rust- en browsertests uit en controleert de lokale HA-bundel. Een gewone push installeert niets op Home Assistant.
 
-Een versietag zoals `v0.1.0` start apart de ARM64-imageworkflow. Die bouwt en test de container op een ARM64-runner en publiceert het versie-image naar `ghcr.io/allardo24/binga`. De Windows-starter `publiceer-ha.bat` controleert de versies en lokale tests, volgt de GitHub-workflows voor de exacte commit en maakt de HA-catalogus pas zichtbaar nadat het image ook zonder aanmelding kan worden opgehaald. De eerste GHCR-publicatie is standaard privé; maak het package in je eigen GitHub-instellingen publiek voordat de catalogus wordt gepusht.
+Een versietag zoals `v0.1.0` start apart de ARM64-imageworkflow. Die bouwt en test de container op een ARM64-runner en publiceert het versie-image naar `ghcr.io/allardo24/binga`. De Windows-starter `publiceer-ha.bat` controleert de versies en lokale tests, volgt de GitHub-workflows voor de exacte commit en maakt de HA-catalogus pas zichtbaar nadat het image ook zonder aanmelding kan worden opgehaald. Controleer bij elke release opnieuw dat het GHCR-image publiek ophaalbaar is.
 
-De openbare HA-catalogus komt na een geslaagde release als `repository.yaml` en `binga/` in dezelfde GitHub-repository. Pas dan kun je `https://github.com/Allardo24/binga` als add-onrepository aan Home Assistant toevoegen. De huidige lokale bundel blijft daarnaast bruikbaar voor een handmatige installatie.
+De openbare HA-catalogus staat als `repository.yaml` en `binga/` in dezelfde GitHub-repository. De lokale bundel blijft daarnaast bruikbaar voor een handmatige installatie.
 
 ## Wat nog volgt
 
-De lokale checks controleren de webbuild, Rust- en API-tests en browserflows. Docker, ARM64, de echte Pi en Cloudflared zijn nog niet getest; daarvoor is deze lokale controle geen vervanging.
+De lokale checks controleren de webbuild, Rust- en API-tests en browserflows. GitHub heeft het ARM64-image gebouwd en de container-rooktest uitgevoerd. De echte Pi en Cloudflared zijn nog niet getest.
 
-- Container bouwen/starten, ARM64-image controleren en installeren op de daadwerkelijke Pi.
+- Add-on installeren en starten op de daadwerkelijke Pi.
 - Cloudflared-route en externe telefoonverbinding controleren.
 - Capaciteit en herstart/back-up/herstel op HAOS testen.
 - Puntenbalans en gebruiksgemak met een echte groep aanscherpen.

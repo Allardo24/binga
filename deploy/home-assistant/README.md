@@ -1,4 +1,16 @@
-# Binga als lokale HAOS-add-on
+# Binga als HAOS-add-on
+
+## Installeren via GitHub
+
+1. Controleer in Home Assistant dat de systeemarchitectuur `aarch64` is.
+2. Open **Instellingen → Add-ons → Add-onwinkel → ⋮ → Repositories** en voeg `https://github.com/Allardo24/binga` toe.
+3. Open Binga in de add-onwinkel, kies **Installeren**, daarna **Starten**. Schakel eventueel **Start bij opstarten** in.
+4. Open **Webinterface openen**. Binga gebruikt standaard hostpoort `8098`; maak via `/login` een account om spellen te hosten. Spelers kunnen zonder account meedoen.
+5. Controleer de logs en `http://HAOS_LAN_IP:8098/api/health`. Stel daarna pas de publieke Cloudflared-route hieronder in.
+
+De add-on haalt het vooraf gebouwde publieke ARM64-image voor de versie uit `binga/config.yaml` op. Op de Pi hoeft daardoor geen Node- of Rust-build te draaien.
+
+## Alternatief: lokale bronbundel
 
 Deze map bevat de bron voor een installeerbare lokale Home Assistant-add-on. Maak vanuit de projectroot eerst de zelf-contained bundel:
 
@@ -6,9 +18,9 @@ Deze map bevat de bron voor een installeerbare lokale Home Assistant-add-on. Maa
 npm run ha:package
 ```
 
-De uitvoer staat in `build-artifacts/home-assistant-repository/`. De map `binga` daarin bevat alle broncode die Supervisor nodig heeft om het image op de Pi te bouwen. `repository.yaml` is alvast aanwezig voor eventueel later publiceren als catalogus.
+De uitvoer staat in `build-artifacts/home-assistant-repository/`. De map `binga` daarin bevat alle broncode die Supervisor nodig heeft om het image op de Pi te bouwen. De GitHub-catalogus hierboven gebruikt het vooraf gebouwde image.
 
-## Installeren op de Pi
+## Lokale bronbundel installeren op de Pi
 
 1. Kopieer de gegenereerde map `build-artifacts/home-assistant-repository/binga` naar `/addons/binga` op HAOS, bijvoorbeeld met de Studio Code Server- of Samba-add-on.
 2. Open **Instellingen → Add-ons → Add-onwinkel** en kies rechtsboven **Controleren op updates**. Onder *Lokale add-ons* verschijnt Binga.
@@ -40,6 +52,6 @@ De browsersleutel van een gastspeler staat alleen in de eigen browser. Een HA-ba
 
 ## Releaseketen
 
-De broncode staat in [Allardo24/binga](https://github.com/Allardo24/binga). Een gewone push voert GitHub CI uit. Een versietag start de aparte ARM64-imageworkflow; `publiceer-ha.bat` controleert daarna of dat image anoniem te downloaden is en publiceert pas dan `repository.yaml` en `binga/` als HA-catalogus in dezelfde repository. Tot de eerste geslaagde release blijft de lokale add-onbundel hierboven de installatieroute.
+De broncode en HA-catalogus staan in [Allardo24/binga](https://github.com/Allardo24/binga). Een gewone push voert GitHub CI uit. Een versietag start de aparte ARM64-imageworkflow; `publiceer-ha.bat` controleert daarna of dat image anoniem te downloaden is en publiceert pas dan de catalogusupdate. De lokale bronbundel hierboven blijft een alternatief.
 
 Officiële referenties: [Home Assistant appconfiguratie](https://developers.home-assistant.io/docs/apps/configuration/) en [lokale app-tests](https://developers.home-assistant.io/docs/apps/testing/).
