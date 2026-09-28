@@ -10,7 +10,7 @@ use axum::{
         IntoResponse, Response,
         sse::{Event, KeepAlive, Sse},
     },
-    routing::{get, post, put},
+    routing::{delete, get, post, put},
 };
 use domain::Game;
 use futures_util::StreamExt;
@@ -19,7 +19,7 @@ use serde::Deserialize;
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     convert::Infallible,
     sync::{Arc, Mutex},
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
@@ -141,6 +141,7 @@ pub fn app(state: AppState, web: &str) -> Router {
         .route("/api/auth/logout", post(logout))
         .route("/api/auth/me", get(me))
         .route("/api/account", get(account_dashboard))
+        .route("/api/account/history/{id}", delete(hide_account_history))
         .route("/api/host/games", get(list_games).post(create_game))
         .route("/api/host/games/{id}/status", put(set_status))
         .route("/api/host/games/{id}/calls/{item}", put(set_call))
@@ -424,6 +425,11 @@ async fn account_dashboard(
     let db = state.store.lock().unwrap();
     let games = db.list().map_err(internal)?;
     let accounts = db.list_accounts().map_err(internal)?;
+    let hidden: HashSet<String> = db
+        .hidden_history(&account.id)
+        .map_err(internal)?
+        .into_iter()
+        .collect();
     drop(db);
     let mut totals: HashMap<String, (u32, usize)> =
         accounts.iter().map(|a| (a.id.clone(), (0, 0))).collect();
@@ -465,6 +471,9 @@ async fn account_dashboard(
     }
     let mut history = Vec::new();
     for game in &games {
+        if hidden.contains(&game.id) {
+            continue;
+        }
         if let Some(player) = game
             .players
             .iter()
@@ -480,6 +489,33 @@ async fn account_dashboard(
         "games_hosted":games.iter().filter(|g|g.owner_id == account.id).count(),"total_accounts":accounts.len(),"history":history,
         "leaderboard":leaderboard.into_iter().take(50).collect::<Vec<_>>()
     })))
+}
+
+async fn hide_account_history(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+    headers: HeaderMap,
+) -> Result<Json<Value>, Error> {
+    let account = required_account(&state, &headers)?;
+    let mut db = state.store.lock().unwrap();
+    let game = db.get(&id).map_err(|e| Error(StatusCode::NOT_FOUND, e))?;
+    if game.status != "finished" {
+        return Err(invalid(
+            "Alleen afgeronde potjes kun je uit je dashboard halen.".into(),
+        ));
+    }
+    if !game
+        .players
+        .iter()
+        .any(|player| player.account_id.as_deref() == Some(account.id.as_str()))
+    {
+        return Err(Error(
+            StatusCode::NOT_FOUND,
+            "Dit potje staat niet in jouw geschiedenis.".into(),
+        ));
+    }
+    db.hide_history(&account.id, &id).map_err(internal)?;
+    Ok(Json(json!({"ok":true})))
 }
 
 async fn events(

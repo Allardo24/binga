@@ -3,13 +3,17 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+trap {
+    Write-Host "Publicatie gestopt: $($_.Exception.Message)" -ForegroundColor Red
+    exit 1
+}
 $projectRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 Set-Location -LiteralPath $projectRoot
 $repository = 'Allardo24/binga'
 $image = 'ghcr.io/allardo24/binga'
 
 function Invoke-Checked {
-    param([string]$Command, [Parameter(ValueFromRemainingArguments = $true)][string[]]$Arguments)
+    param([string]$Command, [string[]]$Arguments)
     & $Command @Arguments
     if ($LASTEXITCODE -ne 0) {
         throw "$Command $($Arguments -join ' ') mislukte met exitcode $LASTEXITCODE."
@@ -17,7 +21,7 @@ function Invoke-Checked {
 }
 
 function Get-GitValue {
-    param([Parameter(ValueFromRemainingArguments = $true)][string[]]$Arguments)
+    param([string[]]$Arguments)
     $result = & git @Arguments
     if ($LASTEXITCODE -ne 0) {
         throw "git $($Arguments -join ' ') mislukte."
@@ -26,12 +30,12 @@ function Get-GitValue {
 }
 
 function Invoke-Npm {
-    param([Parameter(ValueFromRemainingArguments = $true)][string[]]$Arguments)
+    param([string[]]$Arguments)
     $localNpm = Join-Path $projectRoot '.tools/package/bin/npm-cli.js'
     if (Test-Path -LiteralPath $localNpm) {
-        Invoke-Checked 'node' (@($localNpm) + $Arguments)
+        Invoke-Checked -Command 'node' -Arguments (@($localNpm) + $Arguments)
     } elseif (Get-Command npm.cmd -ErrorAction SilentlyContinue) {
-        Invoke-Checked 'npm.cmd' $Arguments
+        Invoke-Checked -Command 'npm.cmd' -Arguments $Arguments
     } else {
         throw 'npm ontbreekt. Installeer Node.js inclusief npm.'
     }
@@ -85,17 +89,17 @@ foreach ($command in @('git', 'node')) {
 if (-not (Test-Path -LiteralPath (Join-Path $projectRoot '.git'))) {
     throw 'Deze map is geen Git-repository.'
 }
-if ((Get-GitValue @('branch', '--show-current')) -ne 'main') {
+if ((Get-GitValue -Arguments @('symbolic-ref', '--short', 'HEAD')) -ne 'main') {
     throw 'Schakel eerst naar de main-branch.'
 }
-$remote = Get-GitValue @('remote', 'get-url', 'origin')
+$remote = Get-GitValue -Arguments @('remote', 'get-url', 'origin')
 if ($remote -notmatch '^(https://github\.com/|git@github\.com:)(?i:Allardo24/binga)(\.git)?$') {
     throw "Onverwachte origin: $remote"
 }
-if (Get-GitValue @('status', '--porcelain')) {
-    throw 'De werkmap is niet schoon. Commit of ruim je wijzigingen eerst op.'
+if (Get-GitValue -Arguments @('status', '--porcelain')) {
+    throw 'De werkmap bevat ongecommitte wijzigingen. Controleer git status, commit deze update en start publiceer-ha.bat opnieuw.'
 }
-if (-not (Get-GitValue @('config', 'user.name')) -or -not (Get-GitValue @('config', 'user.email'))) {
+if (-not (Get-GitValue -Arguments @('config', 'user.name')) -or -not (Get-GitValue -Arguments @('config', 'user.email'))) {
     throw 'Stel eerst git user.name en user.email voor deze repository in.'
 }
 
@@ -104,19 +108,19 @@ if (-not $Version) { $Version = $currentVersion }
 if ($Version -ne $currentVersion) {
     throw "De gevraagde versie $Version verschilt van package.json ($currentVersion). Werk eerst alle manifesten en de changelog bij."
 }
-Invoke-Checked 'node' @('scripts/check-release-version.mjs', $Version)
+Invoke-Checked -Command 'node' -Arguments @('scripts/check-release-version.mjs', $Version)
 
-Invoke-Checked 'git' @('fetch', 'origin', 'main', '--tags')
-$remoteMain = Get-GitValue @('rev-parse', 'origin/main')
-$mergeBase = Get-GitValue @('merge-base', 'HEAD', 'origin/main')
+Invoke-Checked -Command 'git' -Arguments @('fetch', 'origin', 'main', '--tags')
+$remoteMain = Get-GitValue -Arguments @('rev-parse', 'origin/main')
+$mergeBase = Get-GitValue -Arguments @('merge-base', 'HEAD', 'origin/main')
 if ($mergeBase -ne $remoteMain) {
     throw 'origin/main heeft wijzigingen die lokaal ontbreken. Haal die eerst binnen.'
 }
-$commit = Get-GitValue @('rev-parse', 'HEAD')
+$commit = Get-GitValue -Arguments @('rev-parse', 'HEAD')
 $remoteTag = & git ls-remote --tags origin "refs/tags/v$Version"
 if ($LASTEXITCODE -ne 0) { throw 'Remote tags controleren mislukte.' }
 if ($remoteTag) {
-    $tagCommit = Get-GitValue @('rev-list', '-n', '1', "v$Version")
+    $tagCommit = Get-GitValue -Arguments @('rev-list', '-n', '1', "v$Version")
     if ($tagCommit -ne $commit) {
         throw "v$Version bestaat al voor een andere commit. Verhoog de versie voor nieuwe broncode."
     }
@@ -130,34 +134,34 @@ if ((Read-Host 'Typ PUBLICEREN om te beginnen') -cne 'PUBLICEREN') {
     throw 'Afgebroken zonder wijzigingen.'
 }
 
-Invoke-Npm @('test')
-Invoke-Npm @('run', 'web:build')
-Invoke-Npm @('run', 'test:server')
-Invoke-Npm @('run', 'ha:package')
-Invoke-Npm @('run', 'ha:check')
+Invoke-Npm -Arguments @('test')
+Invoke-Npm -Arguments @('run', 'web:build')
+Invoke-Npm -Arguments @('run', 'test:server')
+Invoke-Npm -Arguments @('run', 'ha:package')
+Invoke-Npm -Arguments @('run', 'ha:check')
 if (-not $env:BINGA_BROWSER_CHANNEL -and (Get-Command 'chrome.exe' -ErrorAction SilentlyContinue)) {
     $env:BINGA_BROWSER_CHANNEL = 'chrome'
 }
-Invoke-Npm @('run', 'test:e2e')
+Invoke-Npm -Arguments @('run', 'test:e2e')
 
 if ($commit -ne $remoteMain) {
-    Invoke-Checked 'git' @('push', 'origin', 'main')
+    Invoke-Checked -Command 'git' -Arguments @('push', 'origin', 'main')
 }
 $ciUrl = Wait-Workflow -Workflow 'ci.yml' -Commit $commit -Branch 'main'
 
 if (-not $remoteTag) {
-    Invoke-Checked 'git' @('tag', "v$Version", $commit)
-    Invoke-Checked 'git' @('push', 'origin', "v$Version")
+    Invoke-Checked -Command 'git' -Arguments @('tag', "v$Version", $commit)
+    Invoke-Checked -Command 'git' -Arguments @('push', 'origin', "v$Version")
 }
 $imageUrl = Wait-Workflow -Workflow 'release.yml' -Commit $commit -Branch "v$Version"
 Test-PublicImage -ReleaseVersion $Version
 
-Invoke-Checked 'node' @('scripts/package-ha-catalog.mjs', $image)
+Invoke-Checked -Command 'node' -Arguments @('scripts/package-ha-catalog.mjs', $image)
 $catalog = Join-Path $projectRoot 'build-artifacts/ha-catalog'
-$current = Get-GitValue @('rev-parse', 'HEAD')
+$current = Get-GitValue -Arguments @('rev-parse', 'HEAD')
 if ($current -ne $commit) { throw 'De lokale broncommit veranderde tijdens de release.' }
-Invoke-Checked 'git' @('fetch', 'origin', 'main')
-$latestMain = Get-GitValue @('rev-parse', 'origin/main')
+Invoke-Checked -Command 'git' -Arguments @('fetch', 'origin', 'main')
+$latestMain = Get-GitValue -Arguments @('rev-parse', 'origin/main')
 if ($latestMain -ne $commit) {
     throw 'main is intussen veranderd. Controleer de nieuwe bron voordat je de catalogus publiceert.'
 }
@@ -167,17 +171,17 @@ if (-not (Test-Path -LiteralPath $targetAddon)) {
     New-Item -ItemType Directory -Path $targetAddon | Out-Null
 }
 Copy-Item -Path (Join-Path $catalog 'binga/*') -Destination $targetAddon -Force
-Invoke-Checked 'git' @('add', 'repository.yaml', 'binga/config.yaml', 'binga/DOCS.md', 'binga/CHANGELOG.md')
-Invoke-Checked 'git' @('diff', '--cached', '--check')
-$staged = Get-GitValue @('diff', '--cached', '--name-only')
+Invoke-Checked -Command 'git' -Arguments @('add', 'repository.yaml', 'binga/config.yaml', 'binga/DOCS.md', 'binga/CHANGELOG.md')
+Invoke-Checked -Command 'git' -Arguments @('diff', '--cached', '--check')
+$staged = Get-GitValue -Arguments @('diff', '--cached', '--name-only')
 if ($staged) {
-    Invoke-Checked 'git' @('diff', '--cached', '--stat')
-    Invoke-Checked 'git' @('diff', '--cached')
+    Invoke-Checked -Command 'git' -Arguments @('diff', '--cached', '--stat')
+    Invoke-Checked -Command 'git' -Arguments @('diff', '--cached')
     if ((Read-Host 'Typ CATALOGUS om deze versie zichtbaar te maken in Home Assistant') -cne 'CATALOGUS') {
         throw 'Image gepubliceerd; cataloguswijzigingen staan lokaal klaar maar zijn niet gepusht.'
     }
-    Invoke-Checked 'git' @('commit', '-m', "Publish HA catalog v$Version")
-    Invoke-Checked 'git' @('push', 'origin', 'main')
+    Invoke-Checked -Command 'git' -Arguments @('commit', '-m', "Publish HA catalog v$Version")
+    Invoke-Checked -Command 'git' -Arguments @('push', 'origin', 'main')
 }
 
 Write-Host "Bron: https://github.com/$repository/commit/$commit"

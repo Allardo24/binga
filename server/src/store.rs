@@ -40,7 +40,13 @@ impl Store {
                  expires_at INTEGER NOT NULL,
                  FOREIGN KEY(account_id) REFERENCES accounts(id) ON DELETE CASCADE
              );
-             CREATE INDEX IF NOT EXISTS sessions_expiry ON sessions(expires_at);",
+             CREATE INDEX IF NOT EXISTS sessions_expiry ON sessions(expires_at);
+             CREATE TABLE IF NOT EXISTS hidden_history (
+                 account_id TEXT NOT NULL,
+                 game_id TEXT NOT NULL,
+                 PRIMARY KEY(account_id, game_id),
+                 FOREIGN KEY(account_id) REFERENCES accounts(id) ON DELETE CASCADE
+             );",
         )?;
         Ok(Self { db })
     }
@@ -71,6 +77,27 @@ impl Store {
         game.revision += 1;
         let data = serde_json::to_string(game).map_err(|e| e.to_string())?;
         self.db.execute("INSERT INTO games(id,data) VALUES(?1,?2) ON CONFLICT(id) DO UPDATE SET data=excluded.data", params![game.id,data]).map_err(|e|e.to_string())?;
+        Ok(())
+    }
+
+    pub fn hidden_history(&self, account_id: &str) -> Result<Vec<String>, String> {
+        let mut stmt = self
+            .db
+            .prepare("SELECT game_id FROM hidden_history WHERE account_id=?1")
+            .map_err(|e| e.to_string())?;
+        stmt.query_map([account_id], |r| r.get::<_, String>(0))
+            .map_err(|e| e.to_string())?
+            .map(|row| row.map_err(|e| e.to_string()))
+            .collect()
+    }
+
+    pub fn hide_history(&mut self, account_id: &str, game_id: &str) -> Result<(), String> {
+        self.db
+            .execute(
+                "INSERT OR IGNORE INTO hidden_history(account_id,game_id) VALUES(?1,?2)",
+                params![account_id, game_id],
+            )
+            .map_err(|e| e.to_string())?;
         Ok(())
     }
 

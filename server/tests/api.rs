@@ -171,6 +171,18 @@ async fn accounts_ownership_guests_history_and_logout() {
     assert_eq!(guest["me"]["card"], json!(card));
     let (_, restored) = request(&app, "GET", &format!("/api/games/{id}"), json!(null), bob).await;
     assert_eq!(restored["me"]["name"], "Bobby");
+    assert_eq!(
+        request(
+            &app,
+            "DELETE",
+            &format!("/api/account/history/{id}"),
+            json!(null),
+            bob,
+        )
+        .await
+        .0,
+        StatusCode::BAD_REQUEST
+    );
 
     assert_eq!(
         request(
@@ -216,6 +228,38 @@ async fn accounts_ownership_guests_history_and_logout() {
     assert_eq!(dashboard["games_played"], 1);
     assert!(dashboard["total_score"].as_u64().unwrap() > 0);
     assert_eq!(dashboard["history"][0]["played_as"], "Bobby");
+    let original_score = dashboard["total_score"].clone();
+    assert_eq!(
+        request(
+            &app,
+            "DELETE",
+            &format!("/api/account/history/{id}"),
+            json!(null),
+            alice,
+        )
+        .await
+        .0,
+        StatusCode::NOT_FOUND
+    );
+    assert_eq!(
+        request(
+            &app,
+            "DELETE",
+            &format!("/api/account/history/{id}"),
+            json!(null),
+            bob,
+        )
+        .await
+        .0,
+        StatusCode::OK
+    );
+    let (_, hidden_dashboard) = request(&app, "GET", "/api/account", json!(null), bob).await;
+    assert_eq!(hidden_dashboard["history"], json!([]));
+    assert_eq!(hidden_dashboard["games_played"], 1);
+    assert_eq!(hidden_dashboard["total_score"], original_score);
+    let (_, still_public) =
+        request(&app, "GET", &format!("/api/games/{id}"), json!(null), None).await;
+    assert_eq!(still_public["players"], 21);
     let (_, host_dashboard) = request(&app, "GET", "/api/account", json!(null), alice).await;
     assert_eq!(host_dashboard["games_hosted"], 1);
 

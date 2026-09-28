@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { placeItem, lineProgress } from "./card";
+import { placeItem, lineProgress, cardHighlights } from "./card";
 describe("kaart indelen", () => {
   it("verwisselt bestaande woorden zonder duplicaten", () => {
     expect(placeItem(["a", "b", "", ""], 0, "b")).toEqual(["b", "a", "", ""]);
@@ -10,5 +10,11 @@ describe("kaart indelen", () => {
   it("herkent een bijna complete diagonaal", () => {
     const card = Array.from({ length: 16 }, (_, i) => String(i));
     expect(lineProgress(card, ["0", "5", "10"])).toBe(3);
+    const near = cardHighlights(card, ["0", "5", "10"]);
+    expect([...near.near]).toEqual([0, 5, 10]);
+    expect([...near.missing]).toContain(15);
+    expect(near.bingo.size).toBe(0);
+    const won = cardHighlights(card, ["0", "5", "10", "15"]);
+    expect([...won.bingo]).toEqual([0, 5, 10, 15]);
   });
 });

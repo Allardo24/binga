@@ -1,7 +1,7 @@
 {
   "name": "binga",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.1.1",
   "type": "module",
   "scripts": {
     "dev": "node scripts/dev.mjs",
@@ -14,7 +14,7 @@
     "server:build": "node scripts/rust.mjs build --locked --release",
     "ha:package": "node scripts/package-ha.mjs",
     "ha:check": "node scripts/package-ha.mjs --check && node scripts/check-ha-repository.mjs",
-    "test:e2e": "node scripts/rust.mjs build --locked && playwright test",
+    "test:e2e": "tsc -b && vite build && node scripts/rust.mjs build --locked && playwright test",
     "format": "prettier --write src scripts tests *.ts *.json"
   },
   "dependencies": {

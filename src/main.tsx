@@ -9,6 +9,7 @@ import {
   Crown,
   Grid2X2,
   LockKeyhole,
+  LogOut,
   Plus,
   Radio,
   Search,
@@ -27,7 +28,8 @@ import {
   type Game,
   type Standing,
 } from "./api";
-import { placeItem, lineProgress } from "./card";
+import { placeItem, cardHighlights } from "./card";
+import { version as appVersion } from "../package.json";
 import "./style.css";
 
 const labels = { lobby: "In de lobby", live: "Nu live", finished: "Afgelopen" };
@@ -53,6 +55,7 @@ function Brand() {
   return (
     <a className="brand" href="/" aria-label="Binga startpagina">
       binga<span>✳</span>
+      <small className="brand-version">v{appVersion}</small>
     </a>
   );
 }
@@ -71,6 +74,21 @@ function Header() {
           Voor hosts
           <ArrowUpRight size={16} />
         </a>
+        {loggedIn && (
+          <button
+            className="text-link logout-link"
+            onClick={async () => {
+              try {
+                await api("/auth/logout", { method: "POST" });
+              } finally {
+                localStorage.removeItem(sessionKey);
+                window.location.href = "/";
+              }
+            }}
+          >
+            Uitloggen <LogOut size={16} />
+          </button>
+        )}
       </div>
     </header>
   );
@@ -303,6 +321,172 @@ function Ranking({
     </section>
   );
 }
+
+function PlayerCardGrid({ game }: { game: Game }) {
+  const card = game.me?.card || [];
+  const highlights = cardHighlights(card, game.calls);
+  return (
+    <div className="bingo-grid live-grid">
+      {card.map((id, i) => {
+        const hit = game.calls.includes(id);
+        const live = game.status === "live";
+        return (
+          <div
+            key={id}
+            className={`bingo-cell ${hit ? "hit" : ""} ${live && highlights.near.has(i) ? "near-hit" : ""} ${live && highlights.missing.has(i) ? "near-miss" : ""} ${highlights.bingo.has(i) ? "bingo-win" : ""}`}
+          >
+            <small>
+              {hit ? <Check size={17} /> : String(i + 1).padStart(2, "0")}
+            </small>
+            <span>{game.items.find((w) => w.id === id)?.text}</span>
+            {hit && <span className="hit-label">GEVALLEN</span>}
+            {live && highlights.missing.has(i) && !hit && (
+              <span className="near-label">NOG DEZE!</span>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function RoundSplash({
+  phase,
+  dismiss,
+}: {
+  phase: "start" | "finished" | null;
+  dismiss: () => void;
+}) {
+  if (!phase) return null;
+  return (
+    <div
+      className={`round-splash ${phase}`}
+      role="status"
+      aria-live="assertive"
+    >
+      <div className="splash-orbit one" />
+      <div className="splash-orbit two" />
+      <div className="splash-content">
+        <span className="splash-kicker">
+          {phase === "start"
+            ? "DE HOST HEEFT GESTART"
+            : "DE HOST HEEFT AFGEROND"}
+        </span>
+        <strong className="splash-word">
+          {phase === "start" ? "LIVE!" : "KLAAR!"}
+        </strong>
+        <p>
+          {phase === "start"
+            ? "Jouw kaart ligt vast. Elke rake voorspelling telt vanaf nu."
+            : "De punten zijn geteld. Tijd voor de eindstand."}
+        </p>
+        <button className="button splash-button" onClick={dismiss}>
+          {phase === "start" ? "Naar mijn kaart" : "Bekijk de eindstand"}
+          <ArrowRight size={18} />
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function useRoundSplash(status: Game["status"] | undefined) {
+  const [phase, setPhase] = useState<"start" | "finished" | null>(null);
+  const previous = useRef<Game["status"] | null>(null);
+  useEffect(() => {
+    if (!status) return;
+    if (previous.current === "lobby" && status === "live") setPhase("start");
+    if (previous.current === "live" && status === "finished")
+      setPhase("finished");
+    previous.current = status;
+  }, [status]);
+  useEffect(() => {
+    if (!phase) return;
+    const timer = setTimeout(
+      () => setPhase(null),
+      phase === "start" ? 3500 : 4800,
+    );
+    return () => clearTimeout(timer);
+  }, [phase]);
+  return { phase, dismiss: () => setPhase(null) };
+}
+
+function Finale({ game, mine }: { game: Game; mine?: Standing }) {
+  const podium = game.standings.slice(0, 3);
+  return (
+    <section className="finale-screen" aria-label="Eindscherm">
+      <div className="finale-hero">
+        <span className="tiny">DE RONDE IS VOORBIJ · {game.title}</span>
+        <h2 className="finale-title">
+          KLAAR<span>!</span>
+        </h2>
+        <p>
+          {mine
+            ? "Dit was jouw ronde. Alle voorspellingen en punten zijn geteld."
+            : "De ronde is gespeeld. Alle voorspellingen en punten zijn geteld."}
+        </p>
+        {mine && (
+          <div className="finale-own">
+            <span>JOUW EINDSCORE</span>
+            <strong className="big-score">
+              {mine.score}
+              <small>PT</small>
+            </strong>
+            <span>
+              PLEK #{mine.rank} VAN {game.players}
+            </span>
+          </div>
+        )}
+      </div>
+      <div className="finale-podium">
+        {podium.map((player, index) => (
+          <div className={`podium-place place-${index + 1}`} key={player.id}>
+            <span className="podium-rank">#{player.rank}</span>
+            <span className="podium-avatar">
+              {player.name.slice(0, 1).toUpperCase()}
+            </span>
+            <strong>{player.name}</strong>
+            <span>{player.score} PT</span>
+          </div>
+        ))}
+      </div>
+      {mine && (
+        <section className="panel finale-awards" aria-label="Jouw puntenopbouw">
+          <div className="section-heading">
+            <h2>Jouw prestaties</h2>
+            <span className="tiny">{mine.score} PUNTEN TOTAAL</span>
+          </div>
+          {mine.awards.length ? (
+            mine.awards.map((award) => (
+              <div className="finale-award" key={award.kind}>
+                <span>
+                  {award.kind === "line"
+                    ? "Eerste lijn"
+                    : award.kind === "full"
+                      ? "Volle kaart"
+                      : award.kind}
+                </span>
+                <strong>+{award.points} pt</strong>
+              </div>
+            ))
+          ) : (
+            <p className="muted small">
+              Deze ronde heb je nog geen punten gehaald.
+            </p>
+          )}
+        </section>
+      )}
+      <Ranking rows={game.standings} me={game.me?.id} finished />
+      {game.me && (
+        <details className="panel finale-card">
+          <summary>
+            Bekijk mijn kaart <ArrowRight size={17} />
+          </summary>
+          <PlayerCardGrid game={game} />
+        </details>
+      )}
+    </section>
+  );
+}
 function CardBuilder({
   game,
   saved,
@@ -316,22 +500,74 @@ function CardBuilder({
   const [card, setCard] = useState<string[]>(
     game.me?.card || Array(16).fill(""),
   );
-  const [slot, setSlot] = useState(0);
+  const [slot, setSlot] = useState<number | null>(game.me ? null : 0);
   const [query, setQuery] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [dragOver, setDragOver] = useState<number | null>(null);
+  const drag = useRef<{ from: number; x: number; y: number } | null>(null);
+  const ignoreClickUntil = useRef(0);
   const count = card.filter(Boolean).length;
+  const ready = count === 16 && Boolean(name.trim());
+  useEffect(() => {
+    const targetSlot = (x: number, y: number) => {
+      const element = document
+        .elementFromPoint(x, y)
+        ?.closest("[data-card-slot]");
+      return element ? Number(element.getAttribute("data-card-slot")) : null;
+    };
+    const move = (event: PointerEvent) => {
+      if (!drag.current) return;
+      if (
+        Math.hypot(
+          event.clientX - drag.current.x,
+          event.clientY - drag.current.y,
+        ) < 12
+      )
+        return;
+      setDragOver(targetSlot(event.clientX, event.clientY));
+    };
+    const release = (event: PointerEvent) => {
+      if (!drag.current) return;
+      const { from, x, y } = drag.current;
+      drag.current = null;
+      setDragOver(null);
+      if (Math.hypot(event.clientX - x, event.clientY - y) < 12) return;
+      ignoreClickUntil.current = Date.now() + 350;
+      window.setTimeout(() => {
+        ignoreClickUntil.current = 0;
+      }, 0);
+      const to = targetSlot(event.clientX, event.clientY);
+      if (to !== null && to !== from) {
+        setCard((current) => placeItem(current, to, current[from]));
+        setSlot(null);
+        setError("");
+      }
+    };
+    document.addEventListener("pointermove", move);
+    document.addEventListener("pointerup", release);
+    document.addEventListener("pointercancel", release);
+    return () => {
+      document.removeEventListener("pointermove", move);
+      document.removeEventListener("pointerup", release);
+      document.removeEventListener("pointercancel", release);
+    };
+  }, []);
   const put = (item: string) => {
+    if (slot === null) {
+      setError("Tik eerst op een vakje waar je dit woord wilt plaatsen.");
+      return;
+    }
     const next = placeItem(card, slot, item);
     setCard(next);
+    setError("");
     const empty = next.findIndex((v, i) => !v && i > slot);
     setSlot(
       empty >= 0
         ? empty
-        : Math.max(
-            0,
-            next.findIndex((v) => !v),
-          ),
+        : next.findIndex((v) => !v) >= 0
+          ? next.findIndex((v) => !v)
+          : null,
     );
   };
   return (
@@ -342,7 +578,8 @@ function CardBuilder({
           <span className="pill">{count}/16 gekozen</span>
         </div>
         <p className="muted">
-          Tik op een vakje, kies een woord. Jij bepaalt de indeling.
+          Tik op een vakje, kies een woord. Sleep gevulde vakjes om ze te
+          wisselen.
         </p>
         <label className="field">
           Je spelersnaam
@@ -358,8 +595,21 @@ function CardBuilder({
           {card.map((id, i) => (
             <button
               key={i}
-              className={`bingo-cell ${slot === i ? "selected" : ""}`}
-              onClick={() => setSlot(i)}
+              data-card-slot={i}
+              className={`bingo-cell ${slot === i ? "selected" : ""} ${id ? "filled" : ""} ${dragOver === i ? "drag-over" : ""}`}
+              onPointerDown={(event) => {
+                if (id && event.isPrimary)
+                  drag.current = {
+                    from: i,
+                    x: event.clientX,
+                    y: event.clientY,
+                  };
+              }}
+              onClick={() => {
+                if (Date.now() < ignoreClickUntil.current) return;
+                setSlot((current) => (current === i ? null : i));
+                setError("");
+              }}
               aria-label={`Vakje ${i + 1}: ${game.items.find((w) => w.id === id)?.text || "leeg"}`}
             >
               <small>{String(i + 1).padStart(2, "0")}</small>
@@ -373,9 +623,19 @@ function CardBuilder({
         </div>
         <ErrorBox text={error} />
         <button
-          className="button lime full-width"
-          disabled={busy || count !== 16 || !name.trim()}
+          className={`button lime full-width confirm-card ${ready ? "ready" : ""}`}
+          disabled={busy}
           onClick={async () => {
+            const missing = [
+              !name.trim() ? "je spelersnaam" : "",
+              count < 16
+                ? `nog ${16 - count} ${count === 15 ? "woord" : "woorden"}`
+                : "",
+            ].filter(Boolean);
+            if (missing.length) {
+              setError(`Nog nodig voor je kaart: ${missing.join(" en ")}.`);
+              return;
+            }
             setBusy(true);
             setError("");
             try {
@@ -398,7 +658,8 @@ function CardBuilder({
           <ArrowRight size={18} />
         </button>
         <p className="small muted centered">
-          Je kunt je kaart aanpassen tot de host het spel start.
+          Druk vóór de start op <strong>Dit wordt mijn kaart</strong>. Pas dan
+          speel je mee. Je kunt hem tot de start aanpassen.
         </p>
       </section>
       <section className="panel pool">
@@ -416,8 +677,9 @@ function CardBuilder({
           />
         </div>
         <p className="small muted">
-          Kies een woord voor vakje {slot + 1}. Een gekozen woord verplaatst
-          mee.
+          {slot === null
+            ? "Tik op een vakje om een woord te kiezen of te vervangen."
+            : `Kies een woord voor vakje ${slot + 1}. Een gekozen woord verplaatst mee.`}
         </p>
         <div className="pool-items">
           {game.items
@@ -439,6 +701,7 @@ function CardBuilder({
 }
 function PlayerGame({ id }: { id: string }) {
   const { game, error, connected, refresh } = useGame(id);
+  const splash = useRoundSplash(game?.status);
   const [editing, setEditing] = useState(false);
   const [toast, setToast] = useState("");
   const previous = useRef<number | null>(null);
@@ -472,6 +735,7 @@ function PlayerGame({ id }: { id: string }) {
     );
   const card = game.me?.card || [];
   const hits = card.filter((id) => game.calls.includes(id)).length;
+  const highlights = cardHighlights(card, game.calls);
   return (
     <>
       <Header />
@@ -500,7 +764,9 @@ function PlayerGame({ id }: { id: string }) {
             {toast}
           </div>
         )}
-        {game.status === "lobby" && (!game.me || editing) ? (
+        {game.status === "finished" ? (
+          <Finale game={game} mine={mine} />
+        ) : game.status === "lobby" && (!game.me || editing) ? (
           <CardBuilder
             game={game}
             saved={async () => {
@@ -516,21 +782,16 @@ function PlayerGame({ id }: { id: string }) {
               Dit spel is al gestart. Je kunt de tussenstand volgen, maar geen
               kaart meer insturen.
             </p>
-            <Ranking
-              rows={game.standings}
-              finished={game.status === "finished"}
-            />
+            <Ranking rows={game.standings} />
           </section>
         ) : (
           <div className="play-layout">
             <section className="card-section">
               <div className="section-heading">
                 <h2>
-                  {game.status === "finished"
-                    ? "Dit was jouw ronde."
-                    : game.status === "lobby"
-                      ? "Jij bent er klaar voor."
-                      : "Jouw voorspellingen"}
+                  {game.status === "lobby"
+                    ? "Jij bent er klaar voor."
+                    : "Jouw voorspellingen"}
                 </h2>
                 <span className="tiny">{hits}/16 GERAAKT</span>
               </div>
@@ -541,43 +802,20 @@ function PlayerGame({ id }: { id: string }) {
                   <button onClick={() => setEditing(true)}>Aanpassen</button>
                 </div>
               )}
-              <div className="bingo-grid live-grid">
-                {card.map((id, i) => {
-                  const hit = game.calls.includes(id);
-                  return (
-                    <div key={id} className={`bingo-cell ${hit ? "hit" : ""}`}>
-                      <small>
-                        {hit ? (
-                          <Check size={17} />
-                        ) : (
-                          String(i + 1).padStart(2, "0")
-                        )}
-                      </small>
-                      <span>{game.items.find((w) => w.id === id)?.text}</span>
-                      {hit && <span className="hit-label">GEVALLEN</span>}
-                    </div>
-                  );
-                })}
-              </div>
+              <PlayerCardGrid game={game} />
               <div className="card-bottom">
                 <span>
-                  <Zap size={16} />{" "}
-                  {game.status === "finished"
-                    ? "De ronde is afgerond"
-                    : "De host vinkt af. Jij volgt mee."}
+                  <Zap size={16} /> De host vinkt af. Jij volgt mee.
                 </span>
-                {lineProgress(card, game.calls) === 3 &&
-                  game.status === "live" && (
-                    <strong>Nog één voor een lijn!</strong>
-                  )}
+                {highlights.missing.size > 0 && game.status === "live" && (
+                  <strong>Nog één voor een lijn!</strong>
+                )}
               </div>
               <Rules game={game} />
             </section>
             <aside>
               <section className="score-panel">
-                <span className="tiny">
-                  {game.status === "finished" ? "JOUW EINDSCORE" : "JOUW SCORE"}
-                </span>
+                <span className="tiny">JOUW SCORE</span>
                 <div className="big-score">
                   {mine?.score || 0}
                   <span>PT</span>
@@ -611,15 +849,12 @@ function PlayerGame({ id }: { id: string }) {
                   })}
                 </div>
               </section>
-              <Ranking
-                rows={game.standings}
-                me={game.me.id}
-                finished={game.status === "finished"}
-              />
+              <Ranking rows={game.standings} me={game.me.id} />
             </aside>
           </div>
         )}
       </main>
+      <RoundSplash phase={splash.phase} dismiss={splash.dismiss} />
     </>
   );
 }
@@ -736,11 +971,16 @@ function AuthPage() {
 function AccountPage() {
   const [dashboard, setDashboard] = useState<AccountDashboard | null>(null);
   const [error, setError] = useState("");
-  useEffect(() => {
-    api<AccountDashboard>("/account")
-      .then(setDashboard)
-      .catch((caught) => setError((caught as Error).message));
+  const [removing, setRemoving] = useState("");
+  const [busy, setBusy] = useState(false);
+  const refreshDashboard = useCallback(async () => {
+    setDashboard(await api<AccountDashboard>("/account"));
   }, []);
+  useEffect(() => {
+    void refreshDashboard().catch((caught) =>
+      setError((caught as Error).message),
+    );
+  }, [refreshDashboard]);
   if (!dashboard)
     return (
       <>
@@ -777,16 +1017,6 @@ function AccountPage() {
             <a className="button lime" href="/host">
               Host een Binga
             </a>
-            <button
-              className="button ghost"
-              onClick={async () => {
-                await api("/auth/logout", { method: "POST" });
-                localStorage.removeItem(sessionKey);
-                window.location.href = "/";
-              }}
-            >
-              Uitloggen
-            </button>
           </div>
         </div>
         <section className="stats-grid">
@@ -818,27 +1048,69 @@ function AccountPage() {
               <span className="pill">{dashboard.history.length}</span>
             </div>
             <div className="history-list">
+              <ErrorBox text={error} />
               {dashboard.history.length ? (
                 dashboard.history.map((game) => (
-                  <a
-                    className="history-row"
-                    href={`/g/${game.id}`}
-                    key={game.id}
-                  >
-                    <div>
-                      <strong>{game.title}</strong>
-                      <small>
-                        {game.played_as} · {labels[game.status]}
-                      </small>
-                    </div>
-                    <span>
-                      <b>{game.score}</b> pt
-                      {game.rank ? ` · #${game.rank}` : ""}
-                    </span>
-                  </a>
+                  <div className="history-row" key={game.id}>
+                    <a className="history-open" href={`/g/${game.id}`}>
+                      <div>
+                        <strong>{game.title}</strong>
+                        <small>
+                          {game.played_as} · {labels[game.status]}
+                        </small>
+                      </div>
+                      <span>
+                        <b>{game.score}</b> pt
+                        {game.rank ? ` · #${game.rank}` : ""}
+                      </span>
+                    </a>
+                    {game.status === "finished" &&
+                      (removing === game.id ? (
+                        <div className="history-confirm">
+                          <small>
+                            Alleen uit jouw dashboard; punten blijven.
+                          </small>
+                          <button
+                            className="text-link danger-text"
+                            disabled={busy}
+                            onClick={async () => {
+                              setBusy(true);
+                              setError("");
+                              try {
+                                await api(`/account/history/${game.id}`, {
+                                  method: "DELETE",
+                                });
+                                await refreshDashboard();
+                                setRemoving("");
+                              } catch (caught) {
+                                setError((caught as Error).message);
+                              } finally {
+                                setBusy(false);
+                              }
+                            }}
+                          >
+                            Ja, verwijderen
+                          </button>
+                          <button
+                            className="text-link"
+                            onClick={() => setRemoving("")}
+                          >
+                            Annuleren
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          className="history-remove"
+                          aria-label={`Verwijder ${game.title} uit jouw dashboard`}
+                          onClick={() => setRemoving(game.id)}
+                        >
+                          <X size={15} />
+                        </button>
+                      ))}
+                  </div>
                 ))
               ) : (
-                <p className="muted">Je eerste spel staat straks hier.</p>
+                <p className="muted">Geen potjes in je dashboard.</p>
               )}
             </div>
           </section>
@@ -924,20 +1196,6 @@ function Host() {
               Zet de woorden klaar. Verzamel je spelers. Laat het gebeuren.
             </p>
           </div>
-          {account && (
-            <button
-              className="button ghost"
-              onClick={async () => {
-                await api("/auth/logout", { method: "POST" });
-                localStorage.removeItem(sessionKey);
-                setAccount(null);
-                setSelected("");
-                window.location.href = "/";
-              }}
-            >
-              Uitloggen
-            </button>
-          )}
         </div>
         <ErrorBox text={error} />
         {!authChecked ? (
@@ -1175,94 +1433,100 @@ function HostGame({ id }: { id: string }) {
         </div>
       </section>
       <ErrorBox text={error || actionError} />
-      <div className="play-layout">
-        <section className="panel">
-          <div className="section-heading">
-            <h2>
-              {game.status === "lobby"
-                ? "Dit kan er zomaar gebeuren."
-                : "Wat kwam er voorbij?"}
-            </h2>
-            <span className="tiny">{game.items.length} ITEMS</span>
-          </div>
-          <div className="search">
-            <Search size={18} />
-            <input
-              placeholder="Zoek een woord of gebeurtenis…"
-              aria-label="Zoek hostwoorden"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-            />
-          </div>
-          <p className="small muted">
-            {game.status === "live"
-              ? "Tik om te bevestigen. Nogmaals tikken draait de bevestiging terug en herberekent de scores."
-              : game.status === "lobby"
-                ? "Zodra je start, worden kaarten vastgezet en kun je hier afvinken."
-                : "Deze ronde is afgesloten. De eindstand staat vast."}
-          </p>
-          <div className="admin-words">
-            {game.items
-              .filter((w) => w.text.toLowerCase().includes(query.toLowerCase()))
-              .map((w) => (
-                <button
-                  key={w.id}
-                  disabled={game.status !== "live" || busy}
-                  className={`admin-word ${game.calls.includes(w.id) ? "called" : ""}`}
-                  onClick={() =>
-                    void action(`/host/games/${id}/calls/${w.id}`, {
-                      active: !game.calls.includes(w.id),
-                    })
-                  }
-                >
-                  <span>{w.text}</span>
-                  {game.calls.includes(w.id) ? (
-                    <Check size={20} />
-                  ) : (
-                    <Plus size={20} />
-                  )}
-                </button>
-              ))}
-          </div>
-        </section>
-        <aside>
-          <section className="panel invite">
-            <span className="tiny">NODIG JE SPELERS UIT</span>
-            <div className="qr">
-              <QRCodeSVG value={url} size={136} />
+      {game.status === "finished" ? (
+        <Finale
+          game={game}
+          mine={game.standings.find((row) => row.id === game.me?.id)}
+        />
+      ) : (
+        <div className="play-layout">
+          <section className="panel">
+            <div className="section-heading">
+              <h2>
+                {game.status === "lobby"
+                  ? "Dit kan er zomaar gebeuren."
+                  : "Wat kwam er voorbij?"}
+              </h2>
+              <span className="tiny">{game.items.length} ITEMS</span>
             </div>
-            <strong className="game-code">{id}</strong>
-            <button
-              className="button ghost full-width"
-              onClick={async () => {
-                try {
-                  await navigator.clipboard.writeText(url);
-                  setCopied(true);
-                  setTimeout(() => setCopied(false), 2500);
-                } catch {
-                  setActionError(`Kopieer deze link: ${url}`);
-                }
-              }}
-            >
-              <Copy size={16} />
-              {copied ? "Link gekopieerd!" : "Kopieer deelnamelink"}
-            </button>
-            <a
-              className="text-link"
-              href={`/g/${id}`}
-              target="_blank"
-              rel="noreferrer"
-            >
-              Open spelersomgeving <ArrowUpRight size={15} />
-            </a>
+            <div className="search">
+              <Search size={18} />
+              <input
+                placeholder="Zoek een woord of gebeurtenis…"
+                aria-label="Zoek hostwoorden"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+              />
+            </div>
+            <p className="small muted">
+              {game.status === "live"
+                ? "Tik om te bevestigen. Nogmaals tikken draait de bevestiging terug en herberekent de scores."
+                : game.status === "lobby"
+                  ? "Zodra je start, worden kaarten vastgezet en kun je hier afvinken."
+                  : "Deze ronde is afgesloten. De eindstand staat vast."}
+            </p>
+            <div className="admin-words">
+              {game.items
+                .filter((w) =>
+                  w.text.toLowerCase().includes(query.toLowerCase()),
+                )
+                .map((w) => (
+                  <button
+                    key={w.id}
+                    disabled={game.status !== "live" || busy}
+                    className={`admin-word ${game.calls.includes(w.id) ? "called" : ""}`}
+                    onClick={() =>
+                      void action(`/host/games/${id}/calls/${w.id}`, {
+                        active: !game.calls.includes(w.id),
+                      })
+                    }
+                  >
+                    <span>{w.text}</span>
+                    {game.calls.includes(w.id) ? (
+                      <Check size={20} />
+                    ) : (
+                      <Plus size={20} />
+                    )}
+                  </button>
+                ))}
+            </div>
           </section>
-          <Ranking
-            rows={game.standings}
-            finished={game.status === "finished"}
-          />
-          <Rules game={game} />
-        </aside>
-      </div>
+          <aside>
+            <section className="panel invite">
+              <span className="tiny">NODIG JE SPELERS UIT</span>
+              <div className="qr">
+                <QRCodeSVG value={url} size={136} />
+              </div>
+              <strong className="game-code">{id}</strong>
+              <button
+                className="button ghost full-width"
+                onClick={async () => {
+                  try {
+                    await navigator.clipboard.writeText(url);
+                    setCopied(true);
+                    setTimeout(() => setCopied(false), 2500);
+                  } catch {
+                    setActionError(`Kopieer deze link: ${url}`);
+                  }
+                }}
+              >
+                <Copy size={16} />
+                {copied ? "Link gekopieerd!" : "Kopieer deelnamelink"}
+              </button>
+              <a
+                className="text-link"
+                href={`/g/${id}`}
+                target="_blank"
+                rel="noreferrer"
+              >
+                Open spelersomgeving <ArrowUpRight size={15} />
+              </a>
+            </section>
+            <Ranking rows={game.standings} />
+            <Rules game={game} />
+          </aside>
+        </div>
+      )}
     </>
   );
 }
