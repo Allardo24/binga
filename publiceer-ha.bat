@@ -17,7 +17,7 @@ echo.
 if not "%RELEASE_EXIT_CODE%"=="0" (
   echo Release gestopt. Bekijk hierboven welke stappen al zijn voltooid.
 ) else (
-  echo Release en HA-catalogus gepubliceerd. Controleer Home Assistant apart.
+  echo Publicatiescript afgerond. Zie hierboven of de update nieuw of al gepubliceerd is.
 )
 pause
 popd

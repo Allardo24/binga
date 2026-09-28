@@ -110,7 +110,19 @@ if ($LASTEXITCODE -ne 0) { throw 'Remote tags controleren mislukte.' }
 if ($remoteTag) {
     $tagCommit = Get-GitValue -Arguments @('rev-list', '-n', '1', "v$Version")
     if ($tagCommit -ne $commit) {
-        throw "v$Version bestaat al voor een andere commit. Verhoog de versie voor nieuwe broncode."
+        $appChanges = Get-GitValue -Arguments @(
+            'diff', '--name-only', $tagCommit, $commit, '--',
+            'src', 'server/src', 'server/Cargo.toml', 'server/Cargo.lock',
+            'package.json', 'package-lock.json', 'Dockerfile', 'index.html',
+            'vite.config.ts', 'deploy/home-assistant/addon-manifest.yaml'
+        )
+        $catalog = Get-Content -LiteralPath (Join-Path $projectRoot 'binga/config.yaml') -Raw
+        if (-not $appChanges -and $catalog -match "(?m)^version:\s*`"$([regex]::Escape($Version))`"$") {
+            Test-PublicImage -ReleaseVersion $Version
+            Write-Host "Binga v$Version is al gepubliceerd als Home Assistant-update. Er hoeft niets te gebeuren."
+            exit 0
+        }
+        throw "v$Version bestaat al voor andere appcode. Bereid eerst een nieuwe versie voor."
     }
 }
 
