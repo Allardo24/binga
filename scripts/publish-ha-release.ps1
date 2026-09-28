@@ -139,9 +139,6 @@ Invoke-Npm -Arguments @('run', 'web:build')
 Invoke-Npm -Arguments @('run', 'test:server')
 Invoke-Npm -Arguments @('run', 'ha:package')
 Invoke-Npm -Arguments @('run', 'ha:check')
-if (-not $env:BINGA_BROWSER_CHANNEL -and (Get-Command 'chrome.exe' -ErrorAction SilentlyContinue)) {
-    $env:BINGA_BROWSER_CHANNEL = 'chrome'
-}
 Invoke-Npm -Arguments @('run', 'test:e2e')
 
 if ($commit -ne $remoteMain) {
