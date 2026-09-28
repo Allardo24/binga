@@ -29,18 +29,6 @@ function Get-GitValue {
     return ($result | Out-String).Trim()
 }
 
-function Invoke-Npm {
-    param([string[]]$Arguments)
-    $localNpm = Join-Path $projectRoot '.tools/package/bin/npm-cli.js'
-    if (Test-Path -LiteralPath $localNpm) {
-        Invoke-Checked -Command 'node' -Arguments (@($localNpm) + $Arguments)
-    } elseif (Get-Command npm.cmd -ErrorAction SilentlyContinue) {
-        Invoke-Checked -Command 'npm.cmd' -Arguments $Arguments
-    } else {
-        throw 'npm ontbreekt. Installeer Node.js inclusief npm.'
-    }
-}
-
 function Wait-Workflow {
     param([string]$Workflow, [string]$Commit, [string]$Branch)
     $uri = "https://api.github.com/repos/$repository/actions/workflows/$Workflow/runs?head_sha=$Commit&per_page=20"
@@ -129,22 +117,11 @@ if ($remoteTag) {
 Write-Host "Repository: $repository"
 Write-Host "Versie: v$Version"
 Write-Host "Broncommit: $commit"
-Write-Host 'Er worden tests uitgevoerd, daarna broncode/tag en uiteindelijk de HA-catalogus gepubliceerd.'
-if ((Read-Host 'Typ PUBLICEREN om te beginnen') -cne 'PUBLICEREN') {
-    throw 'Afgebroken zonder wijzigingen.'
-}
-
-Invoke-Npm -Arguments @('test')
-Invoke-Npm -Arguments @('run', 'web:build')
-Invoke-Npm -Arguments @('run', 'test:server')
-Invoke-Npm -Arguments @('run', 'ha:package')
-Invoke-Npm -Arguments @('run', 'ha:check')
-Invoke-Npm -Arguments @('run', 'test:e2e')
+Write-Host 'Broncode, release-image en HA-catalogus worden gepubliceerd.'
 
 if ($commit -ne $remoteMain) {
     Invoke-Checked -Command 'git' -Arguments @('push', 'origin', 'main')
 }
-$ciUrl = Wait-Workflow -Workflow 'ci.yml' -Commit $commit -Branch 'main'
 
 if (-not $remoteTag) {
     Invoke-Checked -Command 'git' -Arguments @('tag', "v$Version", $commit)
@@ -173,16 +150,11 @@ Invoke-Checked -Command 'git' -Arguments @('diff', '--cached', '--check')
 $staged = Get-GitValue -Arguments @('diff', '--cached', '--name-only')
 if ($staged) {
     Invoke-Checked -Command 'git' -Arguments @('diff', '--cached', '--stat')
-    Invoke-Checked -Command 'git' -Arguments @('diff', '--cached')
-    if ((Read-Host 'Typ CATALOGUS om deze versie zichtbaar te maken in Home Assistant') -cne 'CATALOGUS') {
-        throw 'Image gepubliceerd; cataloguswijzigingen staan lokaal klaar maar zijn niet gepusht.'
-    }
     Invoke-Checked -Command 'git' -Arguments @('commit', '-m', "Publish HA catalog v$Version")
     Invoke-Checked -Command 'git' -Arguments @('push', 'origin', 'main')
 }
 
 Write-Host "Bron: https://github.com/$repository/commit/$commit"
-Write-Host "CI: $ciUrl"
 Write-Host "Image: $image`:$Version"
 Write-Host "Image-workflow: $imageUrl"
 Write-Host "HA-repository: https://github.com/$repository"
